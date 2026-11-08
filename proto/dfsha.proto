@@ -1,0 +1,191 @@
+// DFSha - contratos gRPC internos (diseño de Andrey Murillo Osorio, Fase I, sección 5 y Anexo A)
+//
+//  * DataNode: plano de datos. Puerto 7001 (TLS, clientes) y 7002 (TLS mutuo, servidores).
+//  * Metadata: plano de control. Puerto 7100 (TLS mutuo). Incluye Raft entre réplicas de metadatos.
+syntax = "proto3";
+
+package dfsha;
+
+// ----------------------------------------------------------------------------
+// Nodos de datos
+// ----------------------------------------------------------------------------
+
+// Primer mensaje de WriteBlock. El token (firmado por metadatos con HMAC) trae
+// el block_id, la operación, el vencimiento, la clave del archivo envuelta y la
+// cadena de réplicas; por eso el cliente no puede alterar la cadena.
+message BlockHeader {
+  string block_id = 1;
+  string token = 2;
+  string sha256 = 3;   // SHA-256 del contenido original del bloque
+  int64 size = 4;      // tamaño del bloque en bytes
+}
+
+message WriteChunk {
+  oneof msg {
+    BlockHeader header = 1;
+    bytes data = 2;    // trozo de hasta 1 MiB
+  }
+}
+
+// Recibo firmado por el nodo que guardó y verificó el bloque. Metadatos exige
+// al menos 2 recibos válidos para aceptar el commit (W = 2 de N = 3).
+message Receipt {
+  string dn_id = 1;
+  string block_id = 2;
+  string sha256 = 3;
+  int64 size = 4;
+  string sig = 5;
+}
+
+message WriteBlockReply {
+  repeated Receipt receipts = 1;   // nodos de la cadena que guardaron el bloque
+  repeated string failed = 2;      // nodos de la cadena que fallaron
+  string detail = 3;
+}
+
+message ReadBlockRequest {
+  string block_id = 1;
+  string token = 2;
+  int64 offset = 3;   // desplazamiento dentro del bloque
+  int64 length = 4;   // 0 = hasta el final del bloque
+}
+
+message DataChunk {
+  bytes data = 1;
+}
+
+message ReplicateBlockRequest {
+  string block_id = 1;
+  string token = 2;
+  string source_addr = 3;  // dirección interna (7002) de una réplica viva
+  string sha256 = 4;
+  int64 size = 5;
+}
+
+message DeleteBlockRequest {
+  string block_id = 1;
+  string token = 2;
+}
+
+message StatusReply {
+  bool ok = 1;
+  string detail = 2;
+}
+
+service DataNode {
+  rpc WriteBlock(stream WriteChunk) returns (WriteBlockReply);
+  rpc ReadBlock(ReadBlockRequest) returns (stream DataChunk);
+  rpc ReplicateBlock(ReplicateBlockRequest) returns (Receipt);
+  rpc DeleteBlock(DeleteBlockRequest) returns (StatusReply);
+}
+
+// ----------------------------------------------------------------------------
+// Servicio de metadatos (Raft + operaciones)
+// ----------------------------------------------------------------------------
+
+message VoteRequest {
+  int64 term = 1;
+  string candidate_id = 2;
+  int64 last_log_index = 3;
+  int64 last_log_term = 4;
+  bool pre_vote = 5;   // PreVote (tesis de Ongaro, 9.6): no altera términos ni votos
+}
+
+message VoteReply {
+  int64 term = 1;
+  bool granted = 2;
+}
+
+message LogEntry {
+  int64 index = 1;
+  int64 term = 2;
+  bytes command = 3;   // comando JSON de la máquina de estados
+}
+
+message AppendRequest {
+  int64 term = 1;
+  string leader_id = 2;
+  int64 prev_log_index = 3;
+  int64 prev_log_term = 4;
+  repeated LogEntry entries = 5;
+  int64 leader_commit = 6;
+}
+
+message AppendReply {
+  int64 term = 1;
+  bool success = 2;
+  int64 match_index = 3;
+  int64 conflict_index = 4;
+}
+
+message SnapshotRequest {
+  int64 term = 1;
+  string leader_id = 2;
+  int64 last_index = 3;
+  int64 last_term = 4;
+  bytes data = 5;
+}
+
+message SnapshotReply {
+  int64 term = 1;
+}
+
+// Sobre genérico para las operaciones que llegan desde la puerta de entrada,
+// autenticación, trabajadores y nodos de datos. El estado usa los códigos HTTP
+// del Anexo A.4 (421 = no soy el líder, ver leader_hint).
+message MetaRequest {
+  string op = 1;
+  string user = 2;
+  string role = 3;
+  bytes payload = 4;   // JSON
+  double wait = 5;     // segundos de espera (lock con cola FIFO)
+}
+
+message MetaReply {
+  int32 status = 1;
+  bytes payload = 2;   // JSON
+  string leader_hint = 3;
+}
+
+message HeartbeatRequest {
+  string dn_id = 1;
+  string client_addr = 2;
+  string internal_addr = 3;
+  string zone = 4;
+  int64 capacity = 5;
+  int64 free = 6;
+  int32 active_transfers = 7;
+  int64 block_count = 8;
+}
+
+message HeartbeatReply {
+  bool is_leader = 1;
+  string leader_hint = 2;
+  bool need_block_report = 3;
+}
+
+message BlockInfo {
+  string block_id = 1;
+  string sha256 = 2;
+  int64 size = 3;
+}
+
+message BlockReportRequest {
+  string dn_id = 1;
+  repeated BlockInfo blocks = 2;
+}
+
+message BlockReportReply {
+  bool accepted = 1;
+  string leader_hint = 2;
+  repeated string delete = 3;
+}
+
+service Metadata {
+  rpc RequestVote(VoteRequest) returns (VoteReply);
+  rpc AppendEntries(AppendRequest) returns (AppendReply);
+  rpc InstallSnapshot(SnapshotRequest) returns (SnapshotReply);
+  rpc Call(MetaRequest) returns (MetaReply);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
+  rpc BlockReport(BlockReportRequest) returns (BlockReportReply);
+}
