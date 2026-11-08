@@ -231,16 +231,14 @@ with c.open("/home/andrey/notas.txt", "rw", lock_wait=10) as f:   # open()
 > 2026), la última LTS disponible en 2026; la AMI se toma del parámetro público de Canonical
 > en SSM.
 
-### 5.1 Repositorio en GitHub
-
-El repositorio se arma con los commits de cada integrante, en tres partes (ver
-[Contribuciones](#9-contribuciones)). Antes de desplegar, confirme que `main` tiene las tres
-partes:
+### 5.1 Subir el código a GitHub (una vez, cualquier integrante)
 
 ```bash
-git clone https://github.com/<usuario>/dfsha.git && cd dfsha
-git log --format='%h %an  %s' | cat      # commits de Andrey, Diego y Mateo
-git shortlog -sn HEAD                     # número de commits por integrante
+cd dfsha
+git init && git add . && git commit -m "DFSha Fase II"
+git branch -M main
+git remote add origin https://github.com/<usuario>/dfsha.git
+git push -u origin main
 ```
 
 > Si el repositorio es **privado**, los nodos necesitan un token para clonarlo
@@ -762,20 +760,14 @@ pytest -q tests/unit
 
 ## 9. Contribuciones
 
-El enunciado pide contribuciones identificables. El código se repartió en tres partes que no
-comparten archivos; cada integrante las confirmó con sus propios commits y debe poder explicar
-la suya en detalle (y el resto del sistema a nivel general).
+El enunciado pide contribuciones identificables. Cada integrante debe registrar aquí (y en los
+commits) qué parte desarrolló, probó o documentó:
 
-| Integrante | Parte | Archivos | Commits |
-|---|---|---|---|
-| Andrey Murillo Osorio | **1. Plano de control y consenso** (autor del diseño base) | `proto/`, `src/dfsha/proto/`, `src/dfsha/common/` (config, tls, tokens, crypto, paths, audit, mq), `src/dfsha/metadata/` (Raft, máquina de estados, servicio, ubicación), `tests/unit/`, `docs/`, `pyproject.toml`, `requirements.txt`, `.gitignore`, `.gitattributes` | 7 |
-| Diego | **2. Plano de datos y cliente** | `src/dfsha/common/metaclient.py`, `src/dfsha/datanode/`, `src/dfsha/client/`, `tests/lib.sh`, pruebas 01–03 y `tests/rf3_check.py` | 6 |
-| Mateo | **3. Acceso, mantenimiento, infraestructura y documentación** | `src/dfsha/auth/`, `src/dfsha/gateway/`, `src/dfsha/worker/`, `docker/`, `deploy/`, `scripts/`, `docker-compose.local.yml`, pruebas 04–07 y `tests/bench.py`, `README.md`, `.github/` | 8 |
-
-En la sustentación: Andrey explica Raft, la máquina de estados, locks y tokens de cercado;
-Diego explica la replicación en cadena, el cifrado en reposo, la escritura atómica y la
-semántica RF3 del cliente; Mateo explica la puerta y la autenticación, la re-replicación con
-RabbitMQ, la VPC y los grupos de seguridad, y las pruebas de fallos, seguridad y rendimiento.
+| Integrante | Componentes / pruebas | Commits principales |
+|---|---|---|
+| Andrey Murillo Osorio | Diseño base de la Fase I (opción 1) | |
+| | | |
+| | | |
 
 Referencias: Ghemawat et al., *The Google File System* (SOSP 2003); Apache Hadoop, *HDFS
 Architecture*; Ongaro y Ousterhout, *In Search of an Understandable Consensus Algorithm*
