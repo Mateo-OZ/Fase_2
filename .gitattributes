@@ -1,2 +1,4 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Todo el texto se guarda con fin de línea LF (los scripts corren en Ubuntu)
+* text=auto eol=lf
+*.png binary
+*.pdf binary

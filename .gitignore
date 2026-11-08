@@ -1,0 +1,11 @@
+.local-cluster/
+cluster/
+cluster-local/
+deploy/aws/state.env*
+deploy/compose/.env
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+resultados*.csv
+*.dfspart
