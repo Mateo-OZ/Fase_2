@@ -1,0 +1,117 @@
+# =============================================================================
+# DFSha - despliegue por máquina con perfiles de Docker Compose.
+#
+# Cada EC2 tiene un archivo deploy/compose/.env (lo escribe scripts/node-setup.sh)
+# con COMPOSE_PROFILES=<ctrl1|ctrl2|ctrl3|data> y sus identificadores.
+#
+#   ctrl1 : meta1 + gateway1 + auth
+#   ctrl2 : meta2 + gateway2
+#   ctrl3 : meta3 + rabbitmq + worker1 + worker2
+#   data  : datanode (dn1 ... dn4, uno por máquina)
+#
+# network_mode: host -> cada servicio escucha en la IP privada de la EC2 y
+# los grupos de seguridad de la VPC controlan quién puede hablar con quién.
+# =============================================================================
+name: dfsha
+
+x-dfsha: &dfsha
+  image: dfsha:2.0
+  build:
+    context: ../..
+    dockerfile: docker/Dockerfile
+  network_mode: host
+  restart: unless-stopped
+  env_file: /opt/dfsha/cluster.env
+  volumes:
+    - /etc/dfsha/certs:/etc/dfsha/certs:ro
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  meta:
+    <<: *dfsha
+    container_name: dfsha-meta
+    profiles: [ctrl1, ctrl2, ctrl3]
+    command: ["python", "-m", "dfsha.metadata.main"]
+    environment:
+      DFSHA_META_ID: ${META_ID:-meta1}
+      DFSHA_META_BIND: 0.0.0.0:7100
+      DFSHA_META_DATA: /var/lib/dfsha/meta
+      DFSHA_AUDIT_FILE: /var/lib/dfsha/meta/audit.jsonl
+    volumes:
+      - /etc/dfsha/certs:/etc/dfsha/certs:ro
+      - /var/lib/dfsha/meta:/var/lib/dfsha/meta
+
+  gateway:
+    <<: *dfsha
+    container_name: dfsha-gateway
+    profiles: [ctrl1, ctrl2]
+    command: ["python", "-m", "dfsha.gateway.main"]
+    environment:
+      DFSHA_GATEWAY_ID: ${GATEWAY_ID:-gateway1}
+      DFSHA_GATEWAY_PORT: "8443"
+      DFSHA_AUDIT_FILE: /var/lib/dfsha/audit/gateway.jsonl
+    volumes:
+      - /etc/dfsha/certs:/etc/dfsha/certs:ro
+      - /var/lib/dfsha/audit:/var/lib/dfsha/audit
+
+  auth:
+    <<: *dfsha
+    container_name: dfsha-auth
+    profiles: [ctrl1]
+    command: ["python", "-m", "dfsha.auth.main"]
+    environment:
+      DFSHA_AUTH_ID: auth
+      DFSHA_AUTH_PORT: "8500"
+      DFSHA_AUDIT_FILE: /var/lib/dfsha/audit/auth.jsonl
+    volumes:
+      - /etc/dfsha/certs:/etc/dfsha/certs:ro
+      - /var/lib/dfsha/audit:/var/lib/dfsha/audit
+
+  rabbitmq:
+    image: rabbitmq:4.1
+    container_name: dfsha-rabbitmq
+    profiles: [ctrl3]
+    network_mode: host
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_NODENAME: rabbit@localhost
+    volumes:
+      - /opt/dfsha/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/10-defaults.conf:ro
+      - /opt/dfsha/rabbitmq/certs:/etc/rabbitmq/certs:ro
+      - /var/lib/dfsha/rabbitmq:/var/lib/rabbitmq
+
+  worker1:
+    <<: *dfsha
+    container_name: dfsha-worker1
+    profiles: [ctrl3]
+    command: ["python", "-m", "dfsha.worker.main"]
+    environment:
+      DFSHA_WORKER_ID: worker1
+
+  worker2:
+    <<: *dfsha
+    container_name: dfsha-worker2
+    profiles: [ctrl3]
+    command: ["python", "-m", "dfsha.worker.main"]
+    environment:
+      DFSHA_WORKER_ID: worker2
+
+  datanode:
+    <<: *dfsha
+    container_name: dfsha-datanode
+    profiles: [data]
+    command: ["python", "-m", "dfsha.datanode.main"]
+    environment:
+      DFSHA_DN_ID: ${DN_ID:-dn1}
+      DFSHA_DN_DATA: /var/lib/dfsha/dn
+      DFSHA_DN_CLIENT_BIND: 0.0.0.0:7001
+      DFSHA_DN_INTERNAL_BIND: 0.0.0.0:7002
+      DFSHA_DN_ADVERTISE: ${NODE_IP:-127.0.0.1}
+      DFSHA_DN_ZONE: ${ZONE:-}
+      DFSHA_AUDIT_FILE: /var/lib/dfsha/dn/audit.jsonl
+    volumes:
+      - /etc/dfsha/certs:/etc/dfsha/certs:ro
+      - /var/lib/dfsha/dn:/var/lib/dfsha/dn

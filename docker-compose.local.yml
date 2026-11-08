@@ -1,0 +1,128 @@
+# =============================================================================
+# DFSha completo en un portátil con Docker (red bridge, un contenedor por proceso).
+# Sirve para desarrollar y ensayar antes de AWS; NO es el despliegue final.
+#
+#   ./scripts/gen-certs.sh deploy/inventory/docker-local.env cluster-local
+#   docker compose -f docker-compose.local.yml up -d --build
+#   docker compose -f docker-compose.local.yml run --rm admin create-user andrey
+#   docker compose -f docker-compose.local.yml run --rm client      # shell con `dfs`
+# =============================================================================
+name: dfsha-local
+
+x-svc: &svc
+  image: dfsha:2.0
+  build: { context: ., dockerfile: docker/Dockerfile }
+  restart: unless-stopped
+  env_file: ./cluster-local/cluster.env
+  networks: [dfsnet]
+
+x-env: &env
+  DFSHA_CERT_DIR: /etc/dfsha/certs
+  DFSHA_META_PEERS: meta1=meta1:7100,meta2=meta2:7100,meta3=meta3:7100
+  DFSHA_AUTH_URLS: https://auth:8500
+  DFSHA_MQ_HOST: rabbitmq
+
+x-certs: &certs ./cluster-local/certs:/etc/dfsha/certs:ro
+
+services:
+  meta1: &meta
+    <<: *svc
+    hostname: meta1
+    command: ["python", "-m", "dfsha.metadata.main"]
+    environment: { <<: *env, DFSHA_META_ID: meta1, DFSHA_META_DATA: /var/lib/dfsha/meta }
+    volumes: [*certs, meta1:/var/lib/dfsha/meta]
+  meta2:
+    <<: *meta
+    hostname: meta2
+    environment: { <<: *env, DFSHA_META_ID: meta2, DFSHA_META_DATA: /var/lib/dfsha/meta }
+    volumes: [*certs, meta2:/var/lib/dfsha/meta]
+  meta3:
+    <<: *meta
+    hostname: meta3
+    environment: { <<: *env, DFSHA_META_ID: meta3, DFSHA_META_DATA: /var/lib/dfsha/meta }
+    volumes: [*certs, meta3:/var/lib/dfsha/meta]
+
+  auth:
+    <<: *svc
+    hostname: auth
+    command: ["python", "-m", "dfsha.auth.main"]
+    environment: { <<: *env, DFSHA_AUTH_ID: auth }
+    volumes: [*certs]
+
+  gateway1: &gw
+    <<: *svc
+    hostname: gateway1
+    command: ["python", "-m", "dfsha.gateway.main"]
+    environment: { <<: *env, DFSHA_GATEWAY_ID: gateway1, DFSHA_GATEWAY_PORT: "8443" }
+    volumes: [*certs]
+    ports: ["8443:8443"]
+  gateway2:
+    <<: *gw
+    hostname: gateway2
+    environment: { <<: *env, DFSHA_GATEWAY_ID: gateway2, DFSHA_GATEWAY_PORT: "8443" }
+    ports: ["8444:8443"]
+
+  rabbitmq:
+    image: rabbitmq:4.1
+    hostname: rabbitmq
+    networks: [dfsnet]
+    restart: unless-stopped
+    volumes:
+      - ./cluster-local/rabbitmq.conf:/etc/rabbitmq/conf.d/10-defaults.conf:ro
+      - ./cluster-local/rabbitmq-certs:/etc/rabbitmq/certs:ro
+
+  worker1: &wk
+    <<: *svc
+    command: ["python", "-m", "dfsha.worker.main"]
+    environment: { <<: *env, DFSHA_WORKER_ID: worker1 }
+    volumes: [*certs]
+    depends_on: [rabbitmq]
+  worker2:
+    <<: *wk
+    environment: { <<: *env, DFSHA_WORKER_ID: worker2 }
+
+  dn1: &dn
+    <<: *svc
+    hostname: dn1
+    command: ["python", "-m", "dfsha.datanode.main"]
+    environment: { <<: *env, DFSHA_DN_ID: dn1, DFSHA_DN_ADVERTISE: dn1, DFSHA_DN_DATA: /var/lib/dfsha/dn }
+    volumes: [*certs, dn1:/var/lib/dfsha/dn]
+  dn2:
+    <<: *dn
+    hostname: dn2
+    environment: { <<: *env, DFSHA_DN_ID: dn2, DFSHA_DN_ADVERTISE: dn2, DFSHA_DN_DATA: /var/lib/dfsha/dn }
+    volumes: [*certs, dn2:/var/lib/dfsha/dn]
+  dn3:
+    <<: *dn
+    hostname: dn3
+    environment: { <<: *env, DFSHA_DN_ID: dn3, DFSHA_DN_ADVERTISE: dn3, DFSHA_DN_DATA: /var/lib/dfsha/dn }
+    volumes: [*certs, dn3:/var/lib/dfsha/dn]
+  dn4:
+    <<: *dn
+    hostname: dn4
+    environment: { <<: *env, DFSHA_DN_ID: dn4, DFSHA_DN_ADVERTISE: dn4, DFSHA_DN_DATA: /var/lib/dfsha/dn }
+    volumes: [*certs, dn4:/var/lib/dfsha/dn]
+
+  # Herramientas (no quedan corriendo)
+  admin:
+    <<: *svc
+    profiles: [tools]
+    restart: "no"
+    entrypoint: ["python", "-m", "dfsha.auth.admin"]
+    environment: { <<: *env, DFSHA_AUTH_ID: auth }
+    volumes: [*certs]
+  client:
+    <<: *svc
+    profiles: [tools]
+    restart: "no"
+    entrypoint: ["bash"]
+    environment:
+      DFS_GATEWAY: https://gateway1:8443
+      DFS_CA_FILE: /etc/dfsha/certs/ca.crt
+      DFS_HOME: /tmp/dfs
+    volumes: [*certs]
+
+networks:
+  dfsnet: {}
+
+volumes: { meta1: {}, meta2: {}, meta3: {}, dn1: {}, dn2: {}, dn3: {}, dn4: {} }
