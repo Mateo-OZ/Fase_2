@@ -235,14 +235,14 @@ with c.open("/home/andrey/notas.txt", "rw", lock_wait=10) as f:   # open()
 
 ```bash
 cd dfsha
-git init && git add . && git commit -m "DFSha Fase II"
+git init && git add . && git commit -m "Fase_2"
 git branch -M main
-git remote add origin https://github.com/<usuario>/dfsha.git
+git remote add origin https://github.com/Mateo-OZ/Fase_2.git
 git push -u origin main
 ```
 
 > Si el repositorio es **privado**, los nodos necesitan un token para clonarlo
-> (`https://<token>@github.com/<usuario>/dfsha.git`). Lo más simple para el curso es dejarlo
+> (`https://<token>@github.com/Mateo-OZ/Fase_2.git`). Lo más simple para el curso es dejarlo
 > **público** (no contiene secretos: los certificados y claves se generan después y están en
 > `.gitignore`).
 
@@ -253,8 +253,8 @@ Download PEM** (guarde `labsuser.pem`) y use la terminal del laboratorio (o **AW
 
 ```bash
 # 1) Clonar el repositorio en la terminal del laboratorio
-git clone https://github.com/<usuario>/dfsha.git
-cd dfsha
+git clone https://github.com/Mateo-OZ/Fase_2.git
+cd Fase_2
 
 # 2) IP desde la que hará SSH al bastión. Si entrará desde su portátil, use la IP de su
 #    portátil (ábrala en el navegador: https://checkip.amazonaws.com) en vez de la de la terminal:
@@ -755,21 +755,3 @@ pytest -q tests/unit
 | `401 TOKEN_EXPIRED` | el JWT dura 15 min: `dfs login` (o exporte `DFS_PASSWORD` para que el cliente reintente) |
 | El NLB marca *unhealthy* | `curl -k https://10.20.2.11:8443/healthz` desde el bastión; revise `sudo docker logs dfsha-gateway` |
 | Borrar todo en AWS | `./deploy/aws/99-limpieza.sh` en la terminal del laboratorio (el NAT Gateway consume créditos) |
-
----
-
-## 9. Contribuciones
-
-El enunciado pide contribuciones identificables. Cada integrante debe registrar aquí (y en los
-commits) qué parte desarrolló, probó o documentó:
-
-| Integrante | Componentes / pruebas | Commits principales |
-|---|---|---|
-| Andrey Murillo Osorio | Diseño base de la Fase I (opción 1) | |
-| | | |
-| | | |
-
-Referencias: Ghemawat et al., *The Google File System* (SOSP 2003); Apache Hadoop, *HDFS
-Architecture*; Ongaro y Ousterhout, *In Search of an Understandable Consensus Algorithm*
-(USENIX ATC 2014) y tesis de Ongaro (PreVote, §9.6); van Steen y Tanenbaum, *Distributed
-Systems* (4.ª ed.); Kleppmann, *How to do distributed locking* (tokens de cercado).
